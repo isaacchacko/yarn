@@ -4,10 +4,11 @@ import { DIR } from "./instance";
 import { stateDisplayPath } from "./state";
 import { setOption } from "./tmux";
 import { type Session, sessions } from "./sessions";
-import { createSession } from "./lifecycle";
+import { createSession, killSession } from "./lifecycle";
 import { patch } from "./patch";
 import { SENTRIES } from "./sentry-commands";
 import { BARE_AGENT_SENTRIES, FED_AGENT_SENTRIES } from "./sentry-names";
+import { sentriesOff, setSentryOff } from "./sentries-off";
 
 const SENTRY_CHECK_MS = 15_000;
 const FIRST_RESPAWN_AFTER_MS = 30_000;
@@ -39,7 +40,9 @@ function sentriesWantedByYarnSentriesEnv(): [string, string[]][] {
   return Object.entries(SENTRIES).filter(([n]) => noneAllOrCommaList === "1" || noneAllOrCommaList.split(",").includes(n.slice(SENTRY_PREFIX_LENGTH)));
 }
 
-const isSentryUp = (name: string) => sessions.values().some((s) => s.sentry === true && s.name === name && s.exitCode === null);
+const runningSentry = (name: string) => sessions.values().find((s) => s.sentry === true && s.name === name && s.exitCode === null);
+const isSentryUp = (name: string) => runningSentry(name) !== undefined;
+const bare = (name: string) => name.slice(SENTRY_PREFIX_LENGTH);
 
 const respawns = new Map<string, { tries: number; at: number }>();
 function respawnWithBackoffIfDown(name: string, cmd: string[]) {
@@ -56,16 +59,54 @@ function respawnWithBackoffIfDown(name: string, cmd: string[]) {
   publish("sentry/start", { name, why: "respawn", tries });
 }
 
+function stopIfRunning(name: string, by: string) {
+  const s = runningSentry(name);
+  if (!s) return;
+  console.log(`${name} is switched off; stopping its session ${s.id}`);
+  killSession(s);
+  publish("sentry/stop", { name, session: s.id, by });
+}
+
+let wanted: [string, string[]][] = [];
+let hasWarnedUnreadable = false;
+
+function keepWantedSentriesUpAndSwitchedOffOnesDown() {
+  const off = sentriesOff();
+  if (off === undefined) {
+    if (!hasWarnedUnreadable) console.log("sentries-off.json is unreadable; starting and stopping no sentries until it's fixed");
+    hasWarnedUnreadable = true;
+    return;
+  }
+  hasWarnedUnreadable = false;
+  for (const [name, cmd] of wanted) {
+    const o = off[bare(name)];
+    if (o) stopIfRunning(name, o.by);
+    else respawnWithBackoffIfDown(name, cmd);
+  }
+}
+
+export const sentryNames = () => Object.keys(SENTRIES).map(bare);
+export const isWantedByYarnSentriesEnv = (name: string) => wanted.some(([n]) => bare(n) === name);
+export const isRunning = (name: string) => isSentryUp(`sentry:${name}`);
+
+// constraint: the toggle acts at once rather than on the next 15s check, so `sentry off` returns with the session already gone
+export function switchSentry(name: string, isOff: boolean, by: string) {
+  setSentryOff(name, isOff, by);
+  respawns.delete(`sentry:${name}`);
+  publish(`sentry/${isOff ? "off" : "on"}`, { name, by });
+  keepWantedSentriesUpAndSwitchedOffOnesDown();
+}
+
 export function startSentriesAndKeepThemUp() {
   registerAgentSentriesWithFeedsLoggedAside();
   markSentriesStartedBeforeTheFlagByNameAndScript();
-  const wanted = sentriesWantedByYarnSentriesEnv();
+  wanted = sentriesWantedByYarnSentriesEnv();
+  const off = sentriesOff();
   for (const [name, cmd] of wanted) {
-    if (isSentryUp(name)) continue;
+    if (off === undefined || off[bare(name)] !== undefined || isSentryUp(name)) continue;
     markSentry(createSession(name, cmd, DIR));
     publish("sentry/start", { name, why: "boot" });
   }
-  setInterval(() => {
-    for (const [name, cmd] of wanted) respawnWithBackoffIfDown(name, cmd);
-  }, SENTRY_CHECK_MS);
+  keepWantedSentriesUpAndSwitchedOffOnesDown();
+  setInterval(keepWantedSentriesUpAndSwitchedOffOnesDown, SENTRY_CHECK_MS);
 }

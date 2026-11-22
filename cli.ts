@@ -34,6 +34,7 @@ const usage = `usage:
   yarn restrictions ls [--json]           his autonomy restrictions: id, mode (allow|ask|deny), label, scope
   yarn restrictions check --tool <name> [--input <json>] [--cwd D] [--objective O]   the mode that applies to that tool call, and which restriction
   yarn hold <pr> [why...] | yarn unhold <pr> | yarn holds   stand the sentries down on a PR: the approval sentry won't review, comment, hand back or send it for approval, and the review feed won't touch it
+  yarn sentry ls | yarn sentry off <name> | yarn sentry on <name>   each sentry on or off; off stops it and keeps it stopped across respawns, restarts and deploys
   yarn tasks [--all]                      the user's task board, with each task's timeline; --all adds done and dropped ones
   yarn task new <title...> | yarn task <id> [--title T] [--status todo|doing|you|waiting|blocked|done|dropped] [--question] [--answer A]
                                              [--session ID] [--link URL] [--event TEXT] [--at TIME]   sentry:assistant's edits to the board

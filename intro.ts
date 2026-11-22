@@ -8,6 +8,7 @@ import { DOCS_DIR } from "./docs";
 import { TIMELINES_DIR } from "./timelines";
 import { agentBoardUrl } from "./agent-board-config";
 import { PREVIEW_CAP, PREVIEW_IDLE_MS } from "./previews";
+import { isSentryOff } from "./sentries-off";
 
 export const VERIFIED = "[yarn · verified: Isaac's own request, relayed by the funnel]";
 
@@ -28,7 +29,7 @@ export function intro(s: Session, sentryUses: Record<string, string>) {
 - Docs: Isaac's docs are markdown files in \`${DOCS_DIR}\`, a git repo he reads and edits in Obsidian and in yarn's Docs view. Read and edit them as files, or use \`${CLI} docs ls|read|write|mv|rm\` (a write commits at once, and a doc you create names you its \`owner:\`). His comments are callouts, \`> [!comment]\` then \`> <text>\`; answer under one with a nested \`> > [!reply] <your session name>\` and \`> > <text>\` lines, and leave his comment in place. Link a doc in a thread as \`[[doc:<path>]]\`.
 - Timelines: the history of the work lives in \`${TIMELINES_DIR}\`, plain text files in git: \`<folders>/<timeline label>/<UTC time> <title>.txt\`, one file per event, and a \`now.txt\` per timeline saying in a few lines where it stands now. Before you start, find the timelines your task touches (\`${CLI} timeline find <words>\`, \`${CLI} timeline ls [folder]\`) and read them (\`${CLI} timeline read <path>\`: now.txt, then the latest events). As you work, add an event whenever something happens a later agent would need: a decision and why, a PR opened or merged, a deploy, a finding, a blocker (\`${CLI} timeline add <path> '<title>' '<text>'\`), and keep its now.txt current (\`${CLI} timeline now <path> '<text>'\`). Where no timeline fits, start one, in whatever folders make it easy to find (\`yarn/merge-gate\`, \`dryft/app/priority-queue\`). You may also edit, move or merge the files by hand to correct the record; every change is committed, so nothing is lost.
 - Browser: you have a headless Chrome of your own, with its own profile and none of the user's logins: \`${CLI} browser open <url>\`, then \`screenshot\`, \`read [--ax]\`, \`click <selector | text>\`, \`type <target> <text> [--enter]\`, \`eval <js>\`, \`console\`, \`size <phone | tablet | laptop | desktop | WxH>\` to test the page at another size (\`${CLI} browser\` with no verb lists them). Your agent page shows it live, and the user can take it over; while he does, your browser verbs are refused until he hands it back. Never attach to the user's own Chrome.
-- Approvals: you can't approve the user's own PRs and must not request reviewers; the review sentry keeps one review request he sends himself. On Dryft-AI/app an approval never expires or goes stale: a push after approval keeps it, however big, so never re-request review, re-approve, or treat the PR as needing approval again. The only exception is a push that touches code-owned files whose owner hasn't approved, and then GitHub itself turns reviewDecision back to REVIEW_REQUIRED, so judge by reviewDecision, never by whether there was a push. (A PR Copilot opens with no person behind it needs one extra approval from the start, which has nothing to do with pushes.)
+- Approvals: you can't approve the user's own PRs and must not request reviewers; the review sentry keeps one review request he sends himself. On Dryft-AI/app an approval never expires or goes stale: a push after approval keeps it, however big, so never re-request review, re-approve, or treat the PR as needing approval again. The only exception is a push that touches code-owned files whose owner hasn't approved, and then GitHub itself turns reviewDecision back to REVIEW_REQUIRED, so judge by reviewDecision, never by whether there was a push. (A PR Copilot opens with no person behind it needs one extra approval from the start, which has nothing to do with pushes.)${approvalSentryOffLine()}
 - Merging: Isaac's merge gate, a switch only he flips, decides whether agents merge (\`curl -s localhost:$YARN_PORT/api/merge-gate\`). While it is on he is the last step before any PR merges, in every repo: never merge a PR, arm auto-merge or push straight to main or master (yarn blocks it); get your PR green, reviewed and approved and leave it in his PR queue. While it is off, merging follows the pr-merge restriction as usual.
 - Processes: never stop processes by pattern (\`pkill -f\`, \`killall\`, \`lsof -ti :<port> | xargs kill\`). They match the live yarn, other agents' work and the user's Chrome. Kill only a PID you started yourself, and stop a dev instance with \`./dev.sh stop <instance>\`.
 - Testing: try UI flows on your own dev instance (\`YARN_INSTANCE=<name> YARN_PORT=<port> ./dev.sh\`), never with scratch threads in the user's live inbox. If only live can show it, say so to your router first, and resolve or merge away what you made.
@@ -38,6 +39,11 @@ export function intro(s: Session, sentryUses: Record<string, string>) {
 
 Sentries running now:
 ${sentries.map((o) => `- ${o.name.slice(7)}: ${sentryUses[o.name]}`).join("\n")}${metaLessons(sentries)}${standingDecisions()}`;
+}
+
+function approvalSentryOffLine() {
+  if (!isSentryOff("approval")) return "";
+  return ` The approval sentry is switched off (\`${CLI} sentry ls\`), so nothing approves his PRs for him: each needs a human teammate's approval. Never route around that: don't send a PR to Liudvikas' approval endpoint (\`b\`), approve it as him, or ask another agent to; leave it green in his PR queue for a teammate.`;
 }
 
 function boardLine() {

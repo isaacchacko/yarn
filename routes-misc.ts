@@ -16,11 +16,13 @@ import { onEvent } from "./events";
 import { reviewBoard, reviewQueueOfEveryOpenPr, touchFrom } from "./sentry-files";
 import { favicons, fetchFavicon } from "./favicons";
 import { SENTRIES, restartSentry } from "./sentry-commands";
+import { isRunning, isWantedByYarnSentriesEnv, sentryNames, switchSentry } from "./boot-sentries";
+import { sentriesOff } from "./sentries-off";
 import { pageOf } from "./pages";
 import { isFilled, isRecord } from "./shared/guards";
 import { callOf } from "./restriction-draft";
 import { feedPostsOf } from "./feed-body";
-import { isaacRefusal } from "./isaac-auth";
+import { isIsaacsBrowser, isaacRefusal } from "./isaac-auth";
 import { type Body, type Route, exactly, firstAnswer, flagOf, jsonBody, matching, sender, textOf } from "./route-kit";
 
 async function reorderPinsAsHeDraggedThem(req: Request): Promise<Response> {
@@ -136,6 +138,29 @@ async function restartRunningSentry(req: Request): Promise<Response> {
   return r.ok ? Response.json(r) : new Response(`respawning ${s.name} failed; see the log`, { status: 500 });
 }
 
+function everySentryWithItsSwitch(): Response {
+  const off = sentriesOff();
+  return Response.json({
+    readable: off !== undefined,
+    sentries: sentryNames().map((name) => ({ name, off: off?.[name] ?? null, wanted: isWantedByYarnSentriesEnv(name), running: isRunning(name) })),
+  });
+}
+
+async function switchSentryOnOrOff(req: Request): Promise<Response> {
+  const body = await jsonBody(req);
+  const name = textOf(body, "name") ?? "";
+  const isOff = flagOf(body, "off");
+  if (!sentryNames().includes(name)) return new Response(`no sentry ${name}; \`${CLI} sentry ls\` lists them`, { status: 404 });
+  if (isOff === undefined) return new Response("off: true or false", { status: 400 });
+  const by = isIsaacsBrowser(req) ? "isaac" : (sender(req)?.id ?? "cli");
+  try {
+    switchSentry(name, isOff, by);
+  } catch (error) {
+    return new Response(String(error), { status: 500 });
+  }
+  return everySentryWithItsSwitch();
+}
+
 async function eventsAfter(_req: Request, url: URL): Promise<Response> {
   const p = url.searchParams;
   const after = p.get("after") === "now" ? latestSeq() : Number(p.get("after") ?? 0);
@@ -224,6 +249,8 @@ const ROUTES: Route[] = [
   exactly("GET", "/api/chats", listChatsMatching),
   matching(/^\/api\/chats\/([0-9a-f-]{36})\/resume$/, resumeChat),
   exactly("POST", "/api/sentries/restart", restartRunningSentry),
+  exactly("GET", "/api/sentries", everySentryWithItsSwitch),
+  exactly("POST", "/api/sentries/switch", switchSentryOnOrOff),
   exactly("GET", "/api/events", eventsAfter),
   exactly("POST", "/api/events", publishEvent),
   exactly("GET", "/api/favicon", favicon),

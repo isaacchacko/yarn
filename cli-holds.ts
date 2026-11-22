@@ -1,4 +1,4 @@
-import { argAt, fail, hasArg, mySession, type Verb } from "./cli-shared";
+import { argAt, call, fail, hasArg, listAt, mySession, post, replies, replyOf, type Verb } from "./cli-shared";
 import { didUnhold, hold, holds, prKeyOf } from "./holds";
 
 function repoHere() {
@@ -28,7 +28,29 @@ function listHolds() {
   for (const [key, h] of Object.entries(holds())) console.log(`${key}  since ${new Date(h.at).toLocaleString()}  by ${h.by}${h.why === "" ? "" : `  ${h.why}`}`);
 }
 
+function printSentries(reply: unknown) {
+  const r = replyOf(reply);
+  if (r["readable"] === false) console.log("sentries-off.json is unreadable: yarn starts and stops no sentry until it's fixed");
+  for (const s of replies(listAt(r, "sentries"))) {
+    const off = replyOf(s["off"]);
+    const state = s["off"] === null ? "on " : "off";
+    const why = s["off"] === null ? (s["wanted"] === false ? "  (not in YARN_SENTRIES, so it never starts)" : "") : `  since ${new Date(Number(off["at"])).toLocaleString()} by ${String(off["by"])}`;
+    console.log(`${state}  ${s["running"] === true ? "running" : "stopped"}  ${String(s["name"])}${why}`);
+  }
+}
+
+async function switchSentry(args: string[], isOff: boolean) {
+  const name = argAt(args, 0).replace(/^sentry:/, "");
+  const r = replyOf(await post("/api/sentries/switch", { name, off: isOff }));
+  const s = replies(listAt(r, "sentries")).find((x) => x["name"] === name);
+  if (isOff && s?.["running"] === true) fail(`${name} is off, but its session is still up; see \`yarn sentry ls\``);
+  if (isOff) console.log(`${name} is off: its session is stopped, and yarn won't start it again (boot, respawn or deploy) until \`yarn sentry on ${name}\``);
+  else console.log(s?.["wanted"] === false ? `${name} is on, but YARN_SENTRIES leaves it out, so it won't start` : `${name} is on, and yarn started it`);
+}
+
 export const holdVerbs: Verb[] = [
+  { matches: (verb, args) => verb === "sentry" && args[0] === "ls", run: async () => { printSentries(await call("/api/sentries")); } },
+  { matches: (verb, args) => verb === "sentry" && (args[0] === "off" || args[0] === "on") && hasArg(args, 1), run: async (args) => { await switchSentry(args.slice(1), args[0] === "off"); } },
   { matches: (verb, args) => verb === "hold" && hasArg(args, 0), run: holdPr },
   { matches: (verb, args) => verb === "unhold" && hasArg(args, 0), run: unholdPr },
   { matches: (verb) => verb === "holds", run: listHolds },

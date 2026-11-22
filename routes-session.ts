@@ -1,11 +1,10 @@
 import { callerOf } from "./shared/legacy-maxflow";
-import { inboxesTable } from "./state";
 import { publish } from "./bus";
 import { CLI } from "./instance";
-import { paste, pressEnter, setOption, tmux, tmuxAsync, tmuxName } from "./tmux";
+import { paste, pressEnter, setOption, tmuxAsync, tmuxName } from "./tmux";
 import { type Session, isAgent, isSentry, sessions } from "./sessions";
 import { intro } from "./intro";
-import { dispatch, endWait, screen, setArchived, isWaitingOn, wake } from "./lifecycle";
+import { dispatch, endWait, killSession, screen, setArchived, isWaitingOn, wake } from "./lifecycle";
 import { declareWait, sayWhyInThreadsHeWaitsIn, untilShell } from "./waits";
 import { claudeStateChanged } from "./turns";
 import { SENTRY_USES } from "./sentry-uses";
@@ -253,16 +252,6 @@ async function actOnSession(req: Request, url: URL, match: RegExpExecArray): Pro
   return act ? act(req, s, url) : new Response("method not allowed", { status: 405 });
 }
 
-function kill(s: Session): Response {
-  publish(`session/${s.id}/killed`, { session: s.id, name: s.name });
-  sessions.delete(s.id);
-  inboxesTable.delete(s.id);
-  tmux("kill-session", "-t", tmuxName(s.id));
-  s.proc?.kill();
-  for (const ws of s.clients) ws.close();
-  return new Response(null, { status: 204 });
-}
-
 async function renameOrArchive(req: Request, s: Session): Promise<Response> {
   const body = await jsonBody(req);
   const isArchived = flagOf(body, "archived");
@@ -283,7 +272,10 @@ async function renameOrArchive(req: Request, s: Session): Promise<Response> {
 async function oneSession(req: Request, _url: URL, match: RegExpExecArray): Promise<Response> {
   const s = sessions.get(match[1] ?? "");
   if (!s) return new Response("no such session", { status: 404 });
-  if (req.method === "DELETE") return kill(s);
+  if (req.method === "DELETE") {
+    killSession(s);
+    return new Response(null, { status: 204 });
+  }
   return req.method === "PATCH" ? renameOrArchive(req, s) : Response.json(describe(s));
 }
 

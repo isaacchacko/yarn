@@ -72,6 +72,15 @@ export function createSession(name: string, cmd: string[], cwd: string, { chatId
   return session;
 }
 
+export function killSession(s: Session) {
+  publish(`session/${s.id}/killed`, { session: s.id, name: s.name });
+  sessions.delete(s.id);
+  inboxesTable.delete(s.id);
+  tmux("kill-session", "-t", tmuxName(s.id));
+  s.proc?.kill();
+  for (const ws of s.clients) ws.close();
+}
+
 export function saveInbox(s: Session) {
   if (s.inbox.length === 0 && s.sending === undefined) inboxesTable.delete(s.id);
   else inboxesTable.put(s.id, { inbox: s.inbox, ...(s.sending && { sending: { count: s.sending.count, at: s.sending.at } }) });
