@@ -28,13 +28,21 @@ function listHolds() {
   for (const [key, h] of Object.entries(holds())) console.log(`${key}  since ${new Date(h.at).toLocaleString()}  by ${h.by}${h.why === "" ? "" : `  ${h.why}`}`);
 }
 
+function whyOnOrOff(s: Record<string, unknown>) {
+  if (s["off"] !== null) {
+    const off = replyOf(s["off"]);
+    return `  since ${new Date(Number(off["at"])).toLocaleString()} by ${String(off["by"])}`;
+  }
+  return s["wanted"] === false ? "  (not in YARN_SENTRIES, so it never starts)" : "";
+}
+
 function printSentries(reply: unknown) {
   const r = replyOf(reply);
   if (r["readable"] === false) console.log("sentries-off.json is unreadable: yarn starts and stops no sentry until it's fixed");
-  for (const s of replies(listAt(r, "sentries"))) {
-    const off = replyOf(s["off"]);
+  const sentries = replies(listAt(r, "sentries"));
+  for (const s of sentries) {
     const state = s["off"] === null ? "on " : "off";
-    const why = s["off"] === null ? (s["wanted"] === false ? "  (not in YARN_SENTRIES, so it never starts)" : "") : `  since ${new Date(Number(off["at"])).toLocaleString()} by ${String(off["by"])}`;
+    const why = whyOnOrOff(s);
     console.log(`${state}  ${s["running"] === true ? "running" : "stopped"}  ${String(s["name"])}${why}`);
   }
 }

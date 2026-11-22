@@ -67,18 +67,17 @@ function stopIfRunning(name: string, by: string) {
   publish("sentry/stop", { name, session: s.id, by });
 }
 
-let wanted: [string, string[]][] = [];
-let hasWarnedUnreadable = false;
+const boot: { wanted: [string, string[]][]; hasWarnedUnreadable: boolean } = { wanted: [], hasWarnedUnreadable: false };
 
 function keepWantedSentriesUpAndSwitchedOffOnesDown() {
   const off = sentriesOff();
   if (off === undefined) {
-    if (!hasWarnedUnreadable) console.log("sentries-off.json is unreadable; starting and stopping no sentries until it's fixed");
-    hasWarnedUnreadable = true;
+    if (!boot.hasWarnedUnreadable) console.log("sentries-off.json is unreadable; starting and stopping no sentries until it's fixed");
+    boot.hasWarnedUnreadable = true;
     return;
   }
-  hasWarnedUnreadable = false;
-  for (const [name, cmd] of wanted) {
+  boot.hasWarnedUnreadable = false;
+  for (const [name, cmd] of boot.wanted) {
     const o = off[bare(name)];
     if (o) stopIfRunning(name, o.by);
     else respawnWithBackoffIfDown(name, cmd);
@@ -86,7 +85,7 @@ function keepWantedSentriesUpAndSwitchedOffOnesDown() {
 }
 
 export const sentryNames = () => Object.keys(SENTRIES).map(bare);
-export const isWantedByYarnSentriesEnv = (name: string) => wanted.some(([n]) => bare(n) === name);
+export const isWantedByYarnSentriesEnv = (name: string) => boot.wanted.some(([n]) => bare(n) === name);
 export const isRunning = (name: string) => isSentryUp(`sentry:${name}`);
 
 // constraint: the toggle acts at once rather than on the next 15s check, so `sentry off` returns with the session already gone
@@ -100,9 +99,9 @@ export function switchSentry(name: string, isOff: boolean, by: string) {
 export function startSentriesAndKeepThemUp() {
   registerAgentSentriesWithFeedsLoggedAside();
   markSentriesStartedBeforeTheFlagByNameAndScript();
-  wanted = sentriesWantedByYarnSentriesEnv();
+  boot.wanted = sentriesWantedByYarnSentriesEnv();
   const off = sentriesOff();
-  for (const [name, cmd] of wanted) {
+  for (const [name, cmd] of boot.wanted) {
     if (off === undefined || off[bare(name)] !== undefined || isSentryUp(name)) continue;
     markSentry(createSession(name, cmd, DIR));
     publish("sentry/start", { name, why: "boot" });

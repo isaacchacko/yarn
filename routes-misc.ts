@@ -149,8 +149,8 @@ function everySentryWithItsSwitch(): Response {
 async function switchSentryOnOrOff(req: Request): Promise<Response> {
   const body = await jsonBody(req);
   const name = textOf(body, "name") ?? "";
-  const isOff = flagOf(body, "off");
   if (!sentryNames().includes(name)) return new Response(`no sentry ${name}; \`${CLI} sentry ls\` lists them`, { status: 404 });
+  const isOff = flagOf(body, "off");
   if (isOff === undefined) return new Response("off: true or false", { status: 400 });
   const by = isIsaacsBrowser(req) ? "isaac" : (sender(req)?.id ?? "cli");
   try {
