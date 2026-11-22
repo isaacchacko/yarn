@@ -1,5 +1,4 @@
 import { callerOf } from "./shared/legacy-maxflow";
-import { publish } from "./bus";
 import { CLI } from "./instance";
 import { paste, pressEnter, setOption, tmuxAsync, tmuxName } from "./tmux";
 import { type Session, isAgent, isSentry, sessions } from "./sessions";
