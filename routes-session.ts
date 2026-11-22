@@ -64,11 +64,11 @@ function refusedUnlessHisOwnTyping(req: Request, s: Session, body: Body) {
 
 async function typeInto(req: Request, s: Session): Promise<Response> {
   const body = await jsonBody(req);
-  if (s.exitCode !== null) return new Response("session ended", { status: 409 });
   const text = textOf(body, "text");
   if (isTextForAPlainSentry(s, text)) return nobodyReads(s);
   const refused = refusedUnlessHisOwnTyping(req, s, body);
   if (refused) return refused;
+  if (s.exitCode !== null) return new Response("session ended", { status: 409 });
   const typed = typedFor(req, s, text, body);
   if ("error" in typed) return new Response(typed.error, { status: 409 });
   touchFrom(req, s, "write");
