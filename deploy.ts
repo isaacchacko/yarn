@@ -216,7 +216,7 @@ async function killedSince(seq: number) {
 function failOnLoss(before: Session[] | undefined, after: Session[], killed: Set<string>) {
   const lost = before?.filter((s) => s.running && after.every((a) => a.id !== s.id) && !killed.has(s.id)) ?? [];
   const missing = before ? sentries(before).filter((n) => !sentries(after).includes(n)) : [];
-  console.log(`${after.length} sessions (${before ? `${before.length} before` : "the server was down before"}), ${sentries(after).length} sentries running`);
+  console.log(`${after.filter((s) => s.running).length} sessions running (${before ? `${before.filter((s) => s.running).length} before` : "the server was down before"}), ${sentries(after).length} sentries running`);
   const problems = [
     lost.length > 0 ? `these sessions are gone: ${lost.map((s) => `${s.id} ${s.name}`).join(", ")}` : "",
     missing.length > 0 ? `these sentries aren't running: ${missing.join(", ")}` : "",
